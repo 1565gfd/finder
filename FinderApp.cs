@@ -72,6 +72,7 @@ class FinderApp
     static int activeThreads;    // сколько потоков ещё живо
     static int foundTotal;       // атомарный счётчик найденного
     static DispatcherTimer drainTimer;
+    static System.Diagnostics.Stopwatch sw;   // таймер поиска
 
     // ---- быстрый Win32 обход ----
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
@@ -404,6 +405,7 @@ class FinderApp
         pending = roots.Count;
         foreach (var r in roots) dirQ.Enqueue(r);
 
+        sw = System.Diagnostics.Stopwatch.StartNew();
         int n = Environment.ProcessorCount; if (n < 4) n = 4; if (n > 12) n = 12;
         activeThreads = n;
         for (int i = 0; i < n; i++)
@@ -489,7 +491,7 @@ class FinderApp
             if (results.Items.Count < 50000) results.Items.Add(p);
             added++;
         }
-        counter.Text = foundTotal + " найдено";
+        counter.Text = Fmt(sw.Elapsed) + " · " + foundTotal + " найдено";
         if (searchDone && resultQ.IsEmpty)
         {
             drainTimer.Stop();
@@ -500,9 +502,10 @@ class FinderApp
     static void Done()
     {
         searching = false; StopSpin();
+        if (sw != null) sw.Stop();
         spinner.Visibility = Visibility.Collapsed;
         findLbl.Text = "НАЙТИ"; AC(findBg, findBg.Color, Blue.Color);
-        counter.Text = foundTotal + " найдено";
+        counter.Text = Fmt(sw.Elapsed) + " · " + foundTotal + " найдено";
         if (canceled)
         {
             status.Foreground = Sub;
@@ -724,6 +727,13 @@ class FinderApp
     static void AC(SolidColorBrush br, Color from, Color to)
     { br.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation(from, to, TimeSpan.FromMilliseconds(150))); }
     static DoubleAnimation DA(double a, double b, int ms) { return new DoubleAnimation(a, b, TimeSpan.FromMilliseconds(ms)); }
+
+    // формат времени поиска: «3.4 с» до минуты, дальше «м:сс»
+    static string Fmt(TimeSpan t)
+    {
+        if (t.TotalSeconds < 60) return t.TotalSeconds.ToString("0.0") + " с";
+        return (int)t.TotalMinutes + ":" + t.Seconds.ToString("00");
+    }
 
     static bool Wild(string text, string pat)
     {
