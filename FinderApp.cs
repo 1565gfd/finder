@@ -727,8 +727,15 @@ class FinderApp
             Effect = new DropShadowEffect { BlurRadius = 30, ShadowDepth = 0, Opacity = 0.6, Color = Colors.Black }
         };
         var st = new StackPanel { Margin = new Thickness(26, 20, 26, 20) };
-        st.Children.Add(new TextBlock { Text = "⚙ Настройки", Foreground = Text, FontFamily = Mono,
-            FontSize = 17, FontWeight = FontWeights.Bold, Margin = new Thickness(0, 0, 0, 12) });
+        var hd = new Grid { Margin = new Thickness(0, 0, 0, 12) };
+        hd.ColumnDefinitions.Add(new ColumnDefinition());
+        hd.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        hd.Children.Add(new TextBlock { Text = "⚙ Настройки", Foreground = Text, FontFamily = Mono,
+            FontSize = 17, FontWeight = FontWeights.Bold, VerticalAlignment = VerticalAlignment.Center });
+        var xBtn = WinBtn("✕", ((SolidColorBrush)Red).Color);
+        xBtn.MouseLeftButtonDown += (s, e) => { e.Handled = true; dlg.Close(); };
+        Grid.SetColumn(xBtn, 1); hd.Children.Add(xBtn);
+        st.Children.Add(hd);
 
         st.Children.Add(ToggleRow("Учитывать регистр букв", () => caseSensitive, v => caseSensitive = v));
         st.Children.Add(ToggleRow("Пропускать скрытые файлы и папки", () => skipHidden, v => skipHidden = v));
@@ -761,7 +768,6 @@ class FinderApp
         st.Children.Add(ok);
 
         root.Child = st; dlg.Content = root;
-        root.MouseLeftButtonDown += (s, e) => { if (e.ButtonState == MouseButtonState.Pressed) try { dlg.DragMove(); } catch { } };
         dlg.KeyDown += (s, e) => { if (e.Key == Key.Escape) dlg.Close(); };
         dlg.Opacity = 0;
         dlg.Loaded += (s, e) => dlg.BeginAnimation(UIElement.OpacityProperty, DA(0, 1, 180));
