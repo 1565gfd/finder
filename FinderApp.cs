@@ -20,21 +20,22 @@ using System.Runtime.InteropServices;
 using System.Text;
 using IOPath = System.IO.Path;
 
-// =====================================================================
-//  FINDER — авторский проект.  Водяной знак владельца встроен в код и
-//  интерфейс в зашифрованном виде (см. _sig / Sig()).  Не удалять.
-// =====================================================================
+// Метаданные сборки — для легитимности и вкладки «Свойства» файла.
+[assembly: System.Reflection.AssemblyTitle("FINDER — поиск файлов")]
+[assembly: System.Reflection.AssemblyDescription("Быстрый поиск файлов по имени без открытия файлов")]
+[assembly: System.Reflection.AssemblyProduct("FINDER")]
+[assembly: System.Reflection.AssemblyCompany("1565gfd")]
+[assembly: System.Reflection.AssemblyCopyright("Copyright (c) 2026 1565gfd")]
+[assembly: System.Reflection.AssemblyVersion("1.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("1.0.0.0")]
+
+// FINDER — авторский проект. Водяной знак владельца (1565gfd) — в заголовке
+// окна, шапке интерфейса, подсказке и на заставке.
 class FinderApp
 {
-    // Подпись владельца, XOR-обфускация. Используется в заголовке окна,
-    // в шапке интерфейса, в подсказке и на заставке. Удаление ломает сборку.
-    static readonly byte[] _sig = { 0x96, 0x81, 0xF7, 0xFB, 0xBC, 0x8E, 0x91 };
-    static string Sig()
-    {
-        var b = new byte[_sig.Length];
-        for (int i = 0; i < _sig.Length; i++) b[i] = (byte)(_sig[i] ^ ((0xA7 + i * 13) & 0xFF));
-        return Encoding.UTF8.GetString(b);
-    }
+    // подпись владельца (водяной знак)
+    const string Owner = "1565gfd";
+    static string Sig() { return Owner; }
 
     // ---- палитра (сине-чёрная) ----
     static SolidColorBrush BgTop  = B("#0A0E1A");
