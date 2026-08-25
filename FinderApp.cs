@@ -59,6 +59,7 @@ class FinderApp
     static SolidColorBrush findBg;
     static RotateTransform spinRot;
     static string mode = "contains";
+    static Window mainWin;
     static Dictionary<string, Border> chips = new Dictionary<string, Border>();
     static volatile bool searching = false;
     static volatile bool canceled = false;
@@ -328,6 +329,7 @@ class FinderApp
         win.Content = root;
 
         win.KeyDown += (s, e) => { if (e.Key == Key.Escape) win.Close(); };
+        mainWin = win;
 
         var slide = new TranslateTransform(0, 24);
         root.RenderTransform = slide;
@@ -349,6 +351,20 @@ class FinderApp
         string what = inWhat.Text.Trim();
         if (what.Length == 0) { status.Foreground = Red; status.Text = "введите, что искать"; Pulse(status); return; }
 
+        string where = inWhere.Text.Trim();
+        if (where.Length > 0 && !Directory.Exists(where))
+        {
+            MessageBox.Show(mainWin,
+                "Папка не найдена:\n" + where + "\n\nУкажите существующую папку (например  E:\\ ) или оставьте поле пустым — тогда поиск идёт по всем дискам.",
+                "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+            status.Foreground = Red; status.Text = "папка не найдена";
+            return;
+        }
+
+        var roots = new List<string>();
+        if (where.Length > 0) roots.Add(where);
+        else foreach (var d in DriveInfo.GetDrives()) if (d.IsReady) roots.Add(d.RootDirectory.FullName);
+
         results.Items.Clear();
         counter.Text = "";
         canceled = false;
@@ -356,11 +372,6 @@ class FinderApp
         findLbl.Text = "СТОП"; AC(findBg, findBg.Color, Red.Color);
         spinner.Visibility = Visibility.Visible; StartSpin();
         status.Foreground = Sub; status.Text = "идёт поиск…  нажмите СТОП чтобы прервать";
-
-        string where = inWhere.Text.Trim();
-        var roots = new List<string>();
-        if (where.Length > 0) roots.Add(where);
-        else foreach (var d in DriveInfo.GetDrives()) if (d.IsReady) roots.Add(d.RootDirectory.FullName);
 
         string q = what.ToLowerInvariant();
         string curMode = mode;
@@ -488,6 +499,16 @@ class FinderApp
         if (results.Items.Count >= 50000)
             status.Text = "показаны первые 50000 · всего найдено " + foundTotal;
         Pulse(counter);
+
+        // стандартное окно Windows, если ничего не найдено
+        if (!canceled && foundTotal == 0)
+        {
+            string q = inWhat.Text.Trim();
+            mainWin.Dispatcher.BeginInvoke((Action)(() =>
+                MessageBox.Show(mainWin,
+                    "По запросу «" + q + "» ничего не найдено.\n\nПроверьте написание, смените режим (по имени / маска / расширение) или расширьте область поиска.",
+                    "Поиск файлов", MessageBoxButton.OK, MessageBoxImage.Information)));
+        }
     }
 
     static void OpenFolder(object s, MouseButtonEventArgs e)
