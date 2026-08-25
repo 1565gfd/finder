@@ -6,6 +6,18 @@
   <img src="finder.png" width="120" alt="FINDER icon">
 </p>
 
+## ⬇️ Скачать
+
+**Windows** — [**FinderApp.exe**](https://github.com/1565gfd/finder/releases/latest/download/FinderApp.exe) · один файл, скачал и запустил (иконка встроена).
+
+**Linux (SteamOS / Arch / любой):**
+- окно/GUI — [**finder_gui.py**](https://github.com/1565gfd/finder/releases/latest/download/finder_gui.py) → `python3 finder_gui.py`
+- терминал — [**finder.sh**](https://github.com/1565gfd/finder/releases/latest/download/finder.sh) → `chmod +x finder.sh && ./finder.sh`
+
+Все версии и обновления — на [**странице релизов**](https://github.com/1565gfd/finder/releases/latest).
+
+> `.exe` — только для Windows; на Linux запускай `finder_gui.py` или `finder.sh`.
+
 ## Возможности
 
 - 🔎 Поиск по части имени, по маске (`*.pdf`), точному имени или расширению
