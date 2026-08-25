@@ -1,0 +1,4 @@
+# shell-скрипты всегда с LF-переводами строк (иначе не работают на Linux)
+*.sh text eol=lf
+# батники — CRLF (Windows)
+*.bat text eol=crlf

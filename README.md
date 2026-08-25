@@ -35,6 +35,21 @@ build.bat
 %WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe /nologo /optimize+ /target:winexe /win32icon:finder.ico /out:FinderApp.exe FinderApp.cs
 ```
 
+## Linux (SteamOS / Arch / любой)
+
+Для Linux есть отдельная версия — скрипт **`finder.sh`** (без установки зависимостей, использует стандартный `find`). `.exe` на Linux не запускается — это Windows-программа.
+
+```bash
+chmod +x finder.sh          # один раз — сделать исполняемым
+./finder.sh steam ~/        # искать "steam" в домашней папке
+./finder.sh "*.log" /var/log
+./finder.sh -e pdf ~/Documents
+./finder.sh -all steam      # по всей системе
+./finder.sh                 # интерактивно
+```
+
+Файлы при поиске **не открываются** — читаются только имена.
+
 ## Технологии
 
 - **C# / WPF** — интерфейс, анимации, экран загрузки
