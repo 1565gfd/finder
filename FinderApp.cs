@@ -59,6 +59,14 @@ class FinderApp
     static RotateTransform spinRot;
     static string mode = "contains";
     static Window mainWin;
+    static Border exportBtn;
+    // контекст последнего поиска — для экспорта
+    static string lastQuery = "", lastMode = "", lastScope = "", lastTime = "";
+    static int lastCount = 0;
+    // настройки
+    static bool caseSensitive = false;   // учитывать регистр
+    static bool skipHidden = false;      // пропускать скрытые файлы/папки
+    static int viewCap = 50000;          // сколько путей показывать/хранить
     static Dictionary<string, Border> chips = new Dictionary<string, Border>();
     static volatile bool searching = false;
     static volatile bool canceled = false;
@@ -246,12 +254,14 @@ class FinderApp
         tbar.Children.Add(brand);
 
         var wbtns = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+        var setB = WinBtn("⚙", CardHi.Color);
         var minB = WinBtn("—", CardHi.Color);
         var clsB = WinBtn("✕", ((SolidColorBrush)Red).Color);
         // ловим НАЖАТИЕ и гасим событие, чтобы перетаскивание заголовка не перехватило клик
+        setB.MouseLeftButtonDown += (s, e) => { e.Handled = true; OpenSettings(); };
         minB.MouseLeftButtonDown += (s, e) => { e.Handled = true; win.WindowState = WindowState.Minimized; };
         clsB.MouseLeftButtonDown += (s, e) => { e.Handled = true; win.Close(); };
-        wbtns.Children.Add(minB); wbtns.Children.Add(clsB);
+        wbtns.Children.Add(setB); wbtns.Children.Add(minB); wbtns.Children.Add(clsB);
         Grid.SetColumn(wbtns, 1); tbar.Children.Add(wbtns);
         tbar.MouseLeftButtonDown += (s, e) => { if (e.ButtonState == MouseButtonState.Pressed) try { win.DragMove(); } catch { } };
         Grid.SetRow(tbar, 0); grid.Children.Add(tbar);
@@ -300,6 +310,7 @@ class FinderApp
         sb.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         sb.ColumnDefinitions.Add(new ColumnDefinition());
         sb.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        sb.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         spinner = Spinner(); spinner.Visibility = Visibility.Collapsed;
         Grid.SetColumn(spinner, 0); sb.Children.Add(spinner);
         status = new TextBlock { Text = "введите запрос и нажмите «Найти» (или Enter)", Foreground = Sub, FontFamily = Mono,
@@ -308,6 +319,18 @@ class FinderApp
         counter = new TextBlock { Text = "", Foreground = Green, FontFamily = Mono, FontSize = 13,
             FontWeight = FontWeights.Bold, VerticalAlignment = VerticalAlignment.Center };
         Grid.SetColumn(counter, 2); sb.Children.Add(counter);
+
+        var exBg = new SolidColorBrush(Card.Color);
+        exportBtn = new Border { Background = exBg, CornerRadius = new CornerRadius(12),
+            BorderBrush = Line, BorderThickness = new Thickness(1), Padding = new Thickness(12, 5, 12, 5),
+            Margin = new Thickness(12, 0, 0, 0), Cursor = Cursors.Hand, Opacity = 0.4, IsHitTestVisible = false,
+            VerticalAlignment = VerticalAlignment.Center,
+            Child = new TextBlock { Text = "⬇ экспорт", Foreground = BlueHi, FontFamily = Mono, FontSize = 12, FontWeight = FontWeights.Bold },
+            ToolTip = "Сохранить результаты в файл (TXT / CSV / JSON / HTML)" };
+        exportBtn.MouseEnter += (s, e) => AC(exBg, exBg.Color, CardHi.Color);
+        exportBtn.MouseLeave += (s, e) => AC(exBg, exBg.Color, Card.Color);
+        exportBtn.MouseLeftButtonUp += (s, e) => Export();
+        Grid.SetColumn(exportBtn, 3); sb.Children.Add(exportBtn);
         Grid.SetRow(sb, 4); grid.Children.Add(sb);
 
         root.Child = grid;
@@ -343,6 +366,7 @@ class FinderApp
         if (allPc)
         {
             foreach (var d in DriveInfo.GetDrives()) if (d.IsReady) roots.Add(d.RootDirectory.FullName);
+            lastScope = "весь компьютер (все диски)";
         }
         else
         {
@@ -364,7 +388,12 @@ class FinderApp
                 return;
             }
             roots.Add(where);
+            lastScope = where;
         }
+
+        lastQuery = what;
+        lastMode = ModeLabel(mode);
+        if (exportBtn != null) { exportBtn.Opacity = 0.4; exportBtn.IsHitTestVisible = false; }
 
         results.Items.Clear();
         counter.Text = "";
@@ -374,7 +403,7 @@ class FinderApp
         spinner.Visibility = Visibility.Visible; StartSpin();
         status.Foreground = Sub; status.Text = allPc ? "поиск по всему компьютеру…  нажмите СТОП" : "идёт поиск…  нажмите СТОП чтобы прервать";
 
-        string q = what.ToLowerInvariant();
+        string q = caseSensitive ? what : what.ToLowerInvariant();
         string curMode = mode;
         string pat; bool wild;
         if (curMode == "ext") { pat = ("*." + q.TrimStart('.')); wild = true; }
@@ -442,6 +471,7 @@ class FinderApp
                 string name = fd.cFileName;
                 if (name == "." || name == "..") continue;
                 bool isDir = (fd.dwFileAttributes & FileAttributes.Directory) != 0;
+                if (skipHidden && (fd.dwFileAttributes & FileAttributes.Hidden) != 0) continue;
                 if (isDir)
                 {
                     if ((fd.dwFileAttributes & FileAttributes.ReparsePoint) != 0)
@@ -455,10 +485,10 @@ class FinderApp
                 }
                 else
                 {
-                    string low = name.ToLowerInvariant();
-                    bool m = curMode == "exact" ? low == pat
-                           : wild ? Wild(low, pat)
-                           : low.IndexOf(pat, StringComparison.Ordinal) >= 0;
+                    string cmp = caseSensitive ? name : name.ToLowerInvariant();
+                    bool m = curMode == "exact" ? cmp == pat
+                           : wild ? Wild(cmp, pat)
+                           : cmp.IndexOf(pat, StringComparison.Ordinal) >= 0;
                     if (m)
                     {
                         resultQ.Enqueue(bslash + name);
@@ -477,7 +507,7 @@ class FinderApp
         string p;
         while (added < 4000 && resultQ.TryDequeue(out p))
         {
-            if (results.Items.Count < 50000) results.Items.Add(p);
+            if (results.Items.Count < viewCap) results.Items.Add(p);
             added++;
         }
         counter.Text = Fmt(sw.Elapsed) + " · " + foundTotal + " найдено";
@@ -495,6 +525,13 @@ class FinderApp
         spinner.Visibility = Visibility.Collapsed;
         findLbl.Text = "НАЙТИ"; AC(findBg, findBg.Color, Blue.Color);
         counter.Text = Fmt(sw.Elapsed) + " · " + foundTotal + " найдено";
+        lastCount = foundTotal; lastTime = Fmt(sw.Elapsed);
+        if (exportBtn != null)
+        {
+            bool has = results.Items.Count > 0;
+            exportBtn.Opacity = has ? 1.0 : 0.4;
+            exportBtn.IsHitTestVisible = has;
+        }
         if (canceled)
         {
             status.Foreground = Sub;
@@ -505,8 +542,8 @@ class FinderApp
             status.Foreground = foundTotal > 0 ? Green : Sub;
             status.Text = foundTotal > 0 ? "готово · двойной клик по файлу — открыть его папку" : "ничего не найдено";
         }
-        if (results.Items.Count >= 50000)
-            status.Text = "показаны первые 50000 · всего найдено " + foundTotal;
+        if (results.Items.Count >= viewCap)
+            status.Text = "показаны первые " + viewCap + " · всего найдено " + foundTotal;
         Pulse(counter);
 
         // стандартное окно Windows, если ничего не найдено
@@ -541,6 +578,218 @@ class FinderApp
             Process.Start(psi);
         }
         catch { status.Foreground = Red; status.Text = "не удалось открыть папку"; }
+    }
+
+    // ================= экспорт результатов =================
+    static string ModeLabel(string m)
+    {
+        return m == "wild" ? "по маске (*)" : m == "exact" ? "точное имя" :
+               m == "ext" ? "по расширению" : "по части имени";
+    }
+
+    static void Export()
+    {
+        if (results.Items.Count == 0) return;
+        var paths = new List<string>();
+        foreach (var it in results.Items) paths.Add((string)it);
+
+        var dlg = new Microsoft.Win32.SaveFileDialog
+        {
+            FileName = "finder_" + DateTime.Now.ToString("yyyyMMdd_HHmm"),
+            DefaultExt = ".txt",
+            Filter = "Текст (*.txt)|*.txt|CSV для Excel (*.csv)|*.csv|JSON (*.json)|*.json|HTML (*.html)|*.html"
+        };
+        if (dlg.ShowDialog() != true) return;
+
+        string ext = IOPath.GetExtension(dlg.FileName).ToLowerInvariant();
+        string date = DateTime.Now.ToString("yyyy-MM-dd HH:mm");
+        try
+        {
+            string content =
+                ext == ".csv" ? BuildCsv(paths, date) :
+                ext == ".json" ? BuildJson(paths, date) :
+                ext == ".html" ? BuildHtml(paths, date) :
+                                 BuildTxt(paths, date);
+            File.WriteAllText(dlg.FileName, content, new UTF8Encoding(true));
+            status.Foreground = Green; status.Text = "сохранено: " + dlg.FileName;
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(mainWin, "Не удалось сохранить файл:\n" + ex.Message,
+                "Экспорт", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    static string CountLine(int shown)
+    {
+        return lastCount + (shown < lastCount ? "  (в файле первые " + shown + ")" : "");
+    }
+
+    static string BuildTxt(List<string> paths, string date)
+    {
+        var b = new StringBuilder();
+        b.AppendLine("FINDER — результаты поиска");
+        b.AppendLine("Запрос:  " + lastQuery);
+        b.AppendLine("Режим:   " + lastMode);
+        b.AppendLine("Где:     " + lastScope);
+        b.AppendLine("Найдено: " + CountLine(paths.Count) + "   время: " + lastTime);
+        b.AppendLine("Дата:    " + date);
+        b.AppendLine(new string('-', 60));
+        foreach (var p in paths) b.AppendLine(p);
+        return b.ToString();
+    }
+
+    static string CsvEsc(string s) { return "\"" + (s ?? "").Replace("\"", "\"\"") + "\""; }
+
+    static string BuildCsv(List<string> paths, string date)
+    {
+        var b = new StringBuilder();
+        b.AppendLine("Запрос," + CsvEsc(lastQuery));
+        b.AppendLine("Режим," + CsvEsc(lastMode));
+        b.AppendLine("Где," + CsvEsc(lastScope));
+        b.AppendLine("Найдено," + lastCount);
+        b.AppendLine("Время," + CsvEsc(lastTime));
+        b.AppendLine("Дата," + CsvEsc(date));
+        b.AppendLine();
+        b.AppendLine("Полный путь,Папка,Имя");
+        foreach (var p in paths)
+        {
+            string dir = IOPath.GetDirectoryName(p) ?? "";
+            string name = IOPath.GetFileName(p);
+            b.AppendLine(CsvEsc(p) + "," + CsvEsc(dir) + "," + CsvEsc(name));
+        }
+        return b.ToString();
+    }
+
+    static string JsonEsc(string s) { return (s ?? "").Replace("\\", "\\\\").Replace("\"", "\\\""); }
+
+    static string BuildJson(List<string> paths, string date)
+    {
+        var b = new StringBuilder();
+        b.Append("{\n");
+        b.Append("  \"запрос\": \"" + JsonEsc(lastQuery) + "\",\n");
+        b.Append("  \"режим\": \"" + JsonEsc(lastMode) + "\",\n");
+        b.Append("  \"где\": \"" + JsonEsc(lastScope) + "\",\n");
+        b.Append("  \"найдено\": " + lastCount + ",\n");
+        b.Append("  \"время\": \"" + JsonEsc(lastTime) + "\",\n");
+        b.Append("  \"дата\": \"" + date + "\",\n");
+        b.Append("  \"результаты\": [\n");
+        for (int i = 0; i < paths.Count; i++)
+            b.Append("    \"" + JsonEsc(paths[i]) + "\"" + (i < paths.Count - 1 ? ",\n" : "\n"));
+        b.Append("  ]\n}");
+        return b.ToString();
+    }
+
+    static string HtmlEsc(string s)
+    { return (s ?? "").Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;"); }
+
+    static string BuildHtml(List<string> paths, string date)
+    {
+        var b = new StringBuilder();
+        b.Append("<!doctype html><html lang=\"ru\"><head><meta charset=\"utf-8\"><title>FINDER — результаты</title><style>");
+        b.Append("body{background:#0a0e1a;color:#e6eaf5;font-family:Consolas,monospace;padding:24px}");
+        b.Append("h1{color:#5b8cff;margin:0 0 12px} .m{color:#6b7690;margin:2px 0} .m b{color:#e6eaf5}");
+        b.Append("table{border-collapse:collapse;width:100%;margin-top:14px}");
+        b.Append("td,th{border-bottom:1px solid #22305a;padding:6px 10px;text-align:left;font-size:13px}");
+        b.Append("th{color:#5b8cff} .d{color:#6b7690} .wm{color:#6b7690;opacity:.7;margin-top:16px}");
+        b.Append("</style></head><body>");
+        b.Append("<h1>FINDER — результаты поиска</h1>");
+        b.Append("<div class=m>Запрос: <b>" + HtmlEsc(lastQuery) + "</b></div>");
+        b.Append("<div class=m>Режим: <b>" + HtmlEsc(lastMode) + "</b></div>");
+        b.Append("<div class=m>Где: <b>" + HtmlEsc(lastScope) + "</b></div>");
+        b.Append("<div class=m>Найдено: <b>" + lastCount + "</b> · время " + HtmlEsc(lastTime) + " · " + date + "</div>");
+        b.Append("<table><tr><th>#</th><th>Папка</th><th>Имя</th></tr>");
+        for (int i = 0; i < paths.Count; i++)
+        {
+            string dir = IOPath.GetDirectoryName(paths[i]) ?? "";
+            string name = IOPath.GetFileName(paths[i]);
+            b.Append("<tr><td class=d>" + (i + 1) + "</td><td class=d>" + HtmlEsc(dir) + "</td><td>" + HtmlEsc(name) + "</td></tr>");
+        }
+        b.Append("</table><div class=wm>© 1565gfd</div></body></html>");
+        return b.ToString();
+    }
+
+    // ================= настройки =================
+    static void OpenSettings()
+    {
+        var dlg = new Window
+        {
+            Width = 440, WindowStyle = WindowStyle.None, AllowsTransparency = true,
+            Background = Brushes.Transparent, SizeToContent = SizeToContent.Height,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner, Owner = mainWin,
+            ResizeMode = ResizeMode.NoResize, ShowInTaskbar = false, Title = "Настройки"
+        };
+        var root = new Border
+        {
+            CornerRadius = new CornerRadius(16), Margin = new Thickness(10),
+            BorderBrush = Line, BorderThickness = new Thickness(1),
+            Background = new LinearGradientBrush(BgTop.Color, BgBot.Color, new Point(0, 0), new Point(0.6, 1)),
+            Effect = new DropShadowEffect { BlurRadius = 30, ShadowDepth = 0, Opacity = 0.6, Color = Colors.Black }
+        };
+        var st = new StackPanel { Margin = new Thickness(26, 20, 26, 20) };
+        st.Children.Add(new TextBlock { Text = "⚙ Настройки", Foreground = Text, FontFamily = Mono,
+            FontSize = 17, FontWeight = FontWeights.Bold, Margin = new Thickness(0, 0, 0, 12) });
+
+        st.Children.Add(ToggleRow("Учитывать регистр букв", () => caseSensitive, v => caseSensitive = v));
+        st.Children.Add(ToggleRow("Пропускать скрытые файлы и папки", () => skipHidden, v => skipHidden = v));
+
+        var lrow = new Grid { Margin = new Thickness(0, 10, 0, 2) };
+        lrow.ColumnDefinitions.Add(new ColumnDefinition());
+        lrow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(110) });
+        lrow.Children.Add(new TextBlock { Text = "Показывать не более (шт.)", Foreground = Text, FontFamily = Mono,
+            FontSize = 13, VerticalAlignment = VerticalAlignment.Center });
+        var lim = new TextBox { Text = viewCap.ToString(), Background = Card, Foreground = Text, CaretBrush = BlueHi,
+            BorderBrush = Line, BorderThickness = new Thickness(1), FontFamily = Mono, FontSize = 13,
+            Padding = new Thickness(8, 6, 8, 6), TextAlignment = TextAlignment.Center };
+        Grid.SetColumn(lim, 1); lrow.Children.Add(lim);
+        st.Children.Add(lrow);
+
+        st.Children.Add(new TextBlock { Text = "изменения применяются к следующему поиску", Foreground = Sub,
+            FontFamily = Mono, FontSize = 11, Margin = new Thickness(0, 6, 0, 14) });
+
+        var okBg = new SolidColorBrush(Blue.Color);
+        var ok = new Border { Background = okBg, CornerRadius = new CornerRadius(10), Cursor = Cursors.Hand,
+            Padding = new Thickness(24, 9, 24, 9), HorizontalAlignment = HorizontalAlignment.Right,
+            Child = new TextBlock { Text = "Готово", Foreground = Brushes.White, FontFamily = Mono, FontSize = 13, FontWeight = FontWeights.Bold } };
+        ok.MouseEnter += (s, e) => AC(okBg, okBg.Color, BlueHi.Color);
+        ok.MouseLeave += (s, e) => AC(okBg, okBg.Color, Blue.Color);
+        ok.MouseLeftButtonUp += (s, e) =>
+        {
+            int v; if (int.TryParse(lim.Text.Trim(), out v) && v >= 100) viewCap = v;
+            dlg.Close();
+        };
+        st.Children.Add(ok);
+
+        root.Child = st; dlg.Content = root;
+        root.MouseLeftButtonDown += (s, e) => { if (e.ButtonState == MouseButtonState.Pressed) try { dlg.DragMove(); } catch { } };
+        dlg.KeyDown += (s, e) => { if (e.Key == Key.Escape) dlg.Close(); };
+        dlg.Opacity = 0;
+        dlg.Loaded += (s, e) => dlg.BeginAnimation(UIElement.OpacityProperty, DA(0, 1, 180));
+        dlg.ShowDialog();
+    }
+
+    // переключатель вкл/выкл в стиле приложения
+    static UIElement ToggleRow(string label, Func<bool> get, Action<bool> set)
+    {
+        var g = new Grid { Margin = new Thickness(0, 8, 0, 8) };
+        g.ColumnDefinitions.Add(new ColumnDefinition());
+        g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        g.Children.Add(new TextBlock { Text = label, Foreground = Text, FontFamily = Mono, FontSize = 13,
+            VerticalAlignment = VerticalAlignment.Center });
+        var pillBg = new SolidColorBrush((get() ? Blue : Card).Color);
+        var knob = new Border { Width = 16, Height = 16, CornerRadius = new CornerRadius(8), Background = Brushes.White,
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = get() ? HorizontalAlignment.Right : HorizontalAlignment.Left, Margin = new Thickness(2) };
+        var pill = new Border { Width = 42, Height = 22, CornerRadius = new CornerRadius(11), Background = pillBg,
+            BorderBrush = Line, BorderThickness = new Thickness(1), Cursor = Cursors.Hand, Child = knob };
+        pill.MouseLeftButtonUp += (s, e) =>
+        {
+            bool nv = !get(); set(nv);
+            pillBg.Color = (nv ? Blue : Card).Color;
+            knob.HorizontalAlignment = nv ? HorizontalAlignment.Right : HorizontalAlignment.Left;
+        };
+        Grid.SetColumn(pill, 1); g.Children.Add(pill);
+        return g;
     }
 
     // ================= элементы =================
