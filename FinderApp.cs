@@ -279,7 +279,7 @@ class FinderApp
         ir.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
         Border bW; inWhat = Input("что искать: имя или *.pdf", out bW, out phWhat);
-        Border bWh; inWhere = Input("где: пусто = все диски", out bWh, out phWhere);
+        Border bWh; inWhere = Input("где: диск или папка (E:\\)", out bWh, out phWhere);
         bWh.Margin = new Thickness(10, 0, 10, 0);
         findBtn = FindButton();
 
@@ -297,6 +297,7 @@ class FinderApp
         cr.Children.Add(Chip("exact", "точно"));
         cr.Children.Add(Chip("ext", "расширение"));
         SelectChip("contains");
+        cr.Children.Add(AllPcButton());
         Grid.SetRow(cr, 2); grid.Children.Add(cr);
 
         // ===== результаты =====
@@ -345,25 +346,41 @@ class FinderApp
     }
 
     // ================= поиск =================
-    static void Start()
+    static void Start() { StartCore(false); }       // обычный поиск — требует диск/папку
+    static void StartAll() { StartCore(true); }      // поиск по всему компьютеру
+
+    static void StartCore(bool allPc)
     {
         if (searching) return;
         string what = inWhat.Text.Trim();
         if (what.Length == 0) { status.Foreground = Red; status.Text = "введите, что искать"; Pulse(status); return; }
 
-        string where = inWhere.Text.Trim();
-        if (where.Length > 0 && !Directory.Exists(where))
-        {
-            MessageBox.Show(mainWin,
-                "Папка не найдена:\n" + where + "\n\nУкажите существующую папку (например  E:\\ ) или оставьте поле пустым — тогда поиск идёт по всем дискам.",
-                "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
-            status.Foreground = Red; status.Text = "папка не найдена";
-            return;
-        }
-
         var roots = new List<string>();
-        if (where.Length > 0) roots.Add(where);
-        else foreach (var d in DriveInfo.GetDrives()) if (d.IsReady) roots.Add(d.RootDirectory.FullName);
+        if (allPc)
+        {
+            foreach (var d in DriveInfo.GetDrives()) if (d.IsReady) roots.Add(d.RootDirectory.FullName);
+        }
+        else
+        {
+            string where = inWhere.Text.Trim();
+            if (where.Length == 0)
+            {
+                MessageBox.Show(mainWin,
+                    "Укажите диск или папку в поле «где» (например  E:\\ ).\n\nЛибо нажмите кнопку «Весь ПК» — тогда поиск пойдёт по всем дискам.",
+                    "Не задана папка", MessageBoxButton.OK, MessageBoxImage.Warning);
+                status.Foreground = Red; status.Text = "укажите диск или папку"; Pulse(status);
+                return;
+            }
+            if (!Directory.Exists(where))
+            {
+                MessageBox.Show(mainWin,
+                    "Папка не найдена:\n" + where + "\n\nУкажите существующую папку (например  E:\\ ) или нажмите «Весь ПК».",
+                    "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                status.Foreground = Red; status.Text = "папка не найдена";
+                return;
+            }
+            roots.Add(where);
+        }
 
         results.Items.Clear();
         counter.Text = "";
@@ -371,7 +388,7 @@ class FinderApp
         searching = true;
         findLbl.Text = "СТОП"; AC(findBg, findBg.Color, Red.Color);
         spinner.Visibility = Visibility.Visible; StartSpin();
-        status.Foreground = Sub; status.Text = "идёт поиск…  нажмите СТОП чтобы прервать";
+        status.Foreground = Sub; status.Text = allPc ? "поиск по всему компьютеру…  нажмите СТОП" : "идёт поиск…  нажмите СТОП чтобы прервать";
 
         string q = what.ToLowerInvariant();
         string curMode = mode;
@@ -578,6 +595,24 @@ class FinderApp
             Child = new TextBlock { Text = label, Foreground = Sub, FontFamily = Mono, FontSize = 12 } };
         b.MouseLeftButtonUp += (s, e) => SelectChip(key);
         chips[key] = b;
+        return b;
+    }
+
+    // отдельная кнопка: поиск по всем дискам компьютера
+    static Border AllPcButton()
+    {
+        var bg = new SolidColorBrush(Card.Color);
+        var tb = new TextBlock { Text = "🖥 весь ПК", Foreground = BlueHi, FontFamily = Mono, FontSize = 12, FontWeight = FontWeights.Bold };
+        var b = new Border { Background = bg, CornerRadius = new CornerRadius(14), Cursor = Cursors.Hand,
+            BorderBrush = Blue, BorderThickness = new Thickness(1), Padding = new Thickness(14, 5, 14, 5),
+            Margin = new Thickness(16, 0, 0, 0), Child = tb, ToolTip = "Искать по всем дискам компьютера" };
+        b.MouseEnter += (s, e) => AC(bg, bg.Color, CardHi.Color);
+        b.MouseLeave += (s, e) => AC(bg, bg.Color, Card.Color);
+        b.MouseLeftButtonUp += (s, e) =>
+        {
+            if (searching) { canceled = true; status.Foreground = Sub; status.Text = "останавливаю…"; }
+            else StartAll();
+        };
         return b;
     }
 
