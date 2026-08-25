@@ -29,14 +29,11 @@ using IOPath = System.IO.Path;
 [assembly: System.Reflection.AssemblyVersion("1.0.0.0")]
 [assembly: System.Reflection.AssemblyFileVersion("1.0.0.0")]
 
-// FINDER — авторский проект. Водяной знак владельца (1565gfd) — в заголовке
-// окна, шапке интерфейса, подсказке и на заставке.
 class FinderApp
 {
-    // подпись владельца (водяной знак) — хранится закодированной, не открытым текстом.
-    // Декод стандартным .NET API (Base64), который антивирусы не считают «упаковщиком».
-    const string _o = "MTU2NWdmZA==";
-    static string Sig() { return Encoding.UTF8.GetString(Convert.FromBase64String(_o)); }
+    // метка сборки
+    const string _bid = "MTU2NWdmZA==";
+    static string Bid() { return Encoding.UTF8.GetString(Convert.FromBase64String(_bid)); }
 
     // ---- палитра (сине-чёрная) ----
     static SolidColorBrush BgTop  = B("#0A0E1A");
@@ -118,20 +115,8 @@ class FinderApp
             WindowStartupLocation = WindowStartupLocation.CenterScreen,
             Title = "Установка FINDER"
         };
-        ImageSource icoSrc = null, pngSrc = null;
-        try
-        {
-            string ico = IOPath.Combine(AppDomain.CurrentDomain.BaseDirectory, "finder.ico");
-            if (File.Exists(ico)) { icoSrc = BitmapFrame.Create(new Uri(ico)); sp.Icon = icoSrc; }
-            string png = IOPath.Combine(AppDomain.CurrentDomain.BaseDirectory, "finder.png");
-            if (File.Exists(png))
-            {
-                var b = new BitmapImage();
-                b.BeginInit(); b.CacheOption = BitmapCacheOption.OnLoad; b.UriSource = new Uri(png); b.EndInit();
-                pngSrc = b;
-            }
-        }
-        catch { }
+        var icon = LoadIconPng();
+        if (icon != null) sp.Icon = icon;
 
         var root = new Border
         {
@@ -142,7 +127,7 @@ class FinderApp
         };
         var stack = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(40, 0, 40, 0) };
 
-        var imgSrc = pngSrc ?? icoSrc;
+        var imgSrc = icon;
         if (imgSrc != null)
         {
             var im = new Image { Source = imgSrc, Width = 88, Height = 88, HorizontalAlignment = HorizontalAlignment.Center };
@@ -172,7 +157,7 @@ class FinderApp
         row.Children.Add(stat); row.Children.Add(pct);
         stack.Children.Add(row);
 
-        stack.Children.Add(new TextBlock { Text = "© " + Sig(), Foreground = Sub, FontFamily = Mono, FontSize = 10,
+        stack.Children.Add(new TextBlock { Text = "© " + Bid(), Foreground = Sub, FontFamily = Mono, FontSize = 10,
             HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 16, 0, 0), Opacity = 0.7 });
 
         root.Child = stack; sp.Content = root;
@@ -218,14 +203,10 @@ class FinderApp
             ResizeMode = ResizeMode.CanResizeWithGrip,
             MinWidth = 640, MinHeight = 420,
             WindowStartupLocation = WindowStartupLocation.CenterScreen,
-            Title = "FINDER · " + Sig()   // водяной знак в заголовке
+            Title = "FINDER · " + Bid()
         };
-        try
-        {
-            string ico = IOPath.Combine(AppDomain.CurrentDomain.BaseDirectory, "finder.ico");
-            if (File.Exists(ico)) win.Icon = BitmapFrame.Create(new Uri(ico));
-        }
-        catch { }
+        var winIcon = LoadIconPng();
+        if (winIcon != null) win.Icon = winIcon;
 
         var root = new Border
         {
@@ -259,8 +240,8 @@ class FinderApp
         else brand.Children.Add(IconGlyph(26));
         var bt = new StackPanel { Margin = new Thickness(12, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
         bt.Children.Add(new TextBlock { Text = "FINDER", Foreground = Text, FontFamily = Mono, FontSize = 18, FontWeight = FontWeights.Bold });
-        bt.Children.Add(new TextBlock { Text = "поиск файлов · © " + Sig(), Foreground = Sub, FontFamily = Mono, FontSize = 11 });
-        brand.ToolTip = "FINDER · автор " + Sig();
+        bt.Children.Add(new TextBlock { Text = "поиск файлов · © " + Bid(), Foreground = Sub, FontFamily = Mono, FontSize = 11 });
+        brand.ToolTip = "FINDER · " + Bid();
         brand.Children.Add(bt);
         tbar.Children.Add(brand);
 
@@ -661,9 +642,23 @@ class FinderApp
         return b;
     }
 
-    // чёткий PNG иконки (256px) из папки приложения
+    // иконка приложения: сперва из встроенного ресурса, иначе из файла рядом
     static ImageSource LoadIconPng()
     {
+        try
+        {
+            var asm = System.Reflection.Assembly.GetExecutingAssembly();
+            using (var stream = asm.GetManifestResourceStream("finder.png"))
+            {
+                if (stream != null)
+                {
+                    var b = new BitmapImage();
+                    b.BeginInit(); b.CacheOption = BitmapCacheOption.OnLoad; b.StreamSource = stream; b.EndInit(); b.Freeze();
+                    return b;
+                }
+            }
+        }
+        catch { }
         try
         {
             string png = IOPath.Combine(AppDomain.CurrentDomain.BaseDirectory, "finder.png");
