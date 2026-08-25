@@ -461,7 +461,13 @@ class FinderApp
                 bool isDir = (fd.dwFileAttributes & FileAttributes.Directory) != 0;
                 if (isDir)
                 {
-                    if ((fd.dwFileAttributes & FileAttributes.ReparsePoint) != 0) continue; // не идём в junction/symlink
+                    if ((fd.dwFileAttributes & FileAttributes.ReparsePoint) != 0)
+                    {
+                        // пропускаем только junction (0xA0000003) и symlink (0xA000000C) —
+                        // они могут зацикливать обход. Облачные папки OneDrive и прочие теги обходим.
+                        uint tag = fd.dwReserved0;
+                        if (tag == 0xA0000003 || tag == 0xA000000C) continue;
+                    }
                     subs.Add(bslash + name);
                 }
                 else
@@ -539,9 +545,13 @@ class FinderApp
         if (!File.Exists(sel)) { status.Foreground = Red; status.Text = "файл больше не существует"; return; }
         try
         {
+            // абсолютный путь к системному explorer.exe — чтобы нельзя было подсунуть свой
+            string winDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+            string explorer = IOPath.Combine(winDir, "explorer.exe");
+            if (!File.Exists(explorer)) explorer = "explorer.exe";
             var psi = new ProcessStartInfo
             {
-                FileName = "explorer.exe",
+                FileName = explorer,
                 Arguments = "/select,\"" + sel + "\"",
                 UseShellExecute = false
             };
