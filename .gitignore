@@ -1,0 +1,10 @@
+# build artifacts
+*.pdb
+*.user
+bin/
+obj/
+
+# temp/screenshots
+_*.png
+Thumbs.db
+desktop.ini
