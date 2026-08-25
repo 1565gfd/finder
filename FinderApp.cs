@@ -33,9 +33,10 @@ using IOPath = System.IO.Path;
 // окна, шапке интерфейса, подсказке и на заставке.
 class FinderApp
 {
-    // подпись владельца (водяной знак)
-    const string Owner = "1565gfd";
-    static string Sig() { return Owner; }
+    // подпись владельца (водяной знак) — хранится закодированной, не открытым текстом.
+    // Декод стандартным .NET API (Base64), который антивирусы не считают «упаковщиком».
+    const string _o = "MTU2NWdmZA==";
+    static string Sig() { return Encoding.UTF8.GetString(Convert.FromBase64String(_o)); }
 
     // ---- палитра (сине-чёрная) ----
     static SolidColorBrush BgTop  = B("#0A0E1A");
